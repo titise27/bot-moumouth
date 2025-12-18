@@ -5,11 +5,15 @@ const {
   EmbedBuilder, StringSelectMenuBuilder
 } = require('discord.js');
 
-require('dotenv').config(); // charge le token depuis le .env
-require('./server'); // Serveur web pour Render
+require('dotenv').config(); // charge le token et le hub depuis le .env
+require('./server'); // serveur web pour Render
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 const tempVocals = new Map();
@@ -51,8 +55,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!oldState.channel && newState.channelId === process.env.HUB_VOICE_ID) {
     const modal = new ModalBuilder().setCustomId('create_vocal_modal').setTitle('Créer ton vocal');
     modal.addComponents(
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nom du vocal').setStyle(TextInputStyle.Short).setRequired(true)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limit').setLabel('Nombre de joueurs').setStyle(TextInputStyle.Short).setRequired(true))
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('name').setLabel('Nom du vocal').setStyle(TextInputStyle.Short).setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('limit').setLabel('Nombre de joueurs').setStyle(TextInputStyle.Short).setRequired(true)
+      )
     );
     await newState.member.send({ content: '🎮 Création du vocal' });
     await newState.member.showModal(modal);
@@ -75,7 +83,11 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit() && interaction.customId === 'create_vocal_modal') {
     const name = interaction.fields.getTextInputValue('name');
     const limit = parseInt(interaction.fields.getTextInputValue('limit'));
-    const menu = new StringSelectMenuBuilder().setCustomId(`select_game_${interaction.user.id}_${name}_${limit}`).setPlaceholder('Choisis ton jeu').addOptions(GAMES);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`select_game_${interaction.user.id}_${name}_${limit}`)
+      .setPlaceholder('Choisis ton jeu')
+      .addOptions(GAMES);
+
     await interaction.reply({ content: '🎮 Choisis ton jeu', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
   }
 
@@ -84,8 +96,14 @@ client.on('interactionCreate', async interaction => {
     let game = interaction.values[0];
 
     if (game === 'Other') {
-      const modal = new ModalBuilder().setCustomId(`other_game_${ownerId}_${name}_${limit}`).setTitle('Écris le nom du jeu');
-      modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('otherName').setLabel('Nom du jeu').setStyle(TextInputStyle.Short).setRequired(true)));
+      const modal = new ModalBuilder()
+        .setCustomId(`other_game_${ownerId}_${name}_${limit}`)
+        .setTitle('Écris le nom du jeu');
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('otherName').setLabel('Nom du jeu').setStyle(TextInputStyle.Short).setRequired(true)
+        )
+      );
       await interaction.user.showModal(modal);
       return;
     }
@@ -110,5 +128,5 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Connexion du bot avec le token depuis le .env
-client.login(process.env.DISCORD_TOKEN);
+// Connexion du bot avec le token depuis Render
+client.login(process.env.TOKEN);
