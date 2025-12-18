@@ -1,12 +1,18 @@
 const {
-  Client, GatewayIntentBits, ChannelType,
-  ModalBuilder, TextInputBuilder, TextInputStyle,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  EmbedBuilder, StringSelectMenuBuilder
+  Client,
+  GatewayIntentBits,
+  ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  StringSelectMenuBuilder
 } = require('discord.js');
 
-require('dotenv').config(); // charge le token et le hub depuis le .env
-require('./server'); // serveur web pour Render
+require('./server'); // Keep-alive Render
 
 const client = new Client({
   intents: [
@@ -16,117 +22,158 @@ const client = new Client({
   ]
 });
 
+// ===== CONFIG VIA RENDER =====
+const TOKEN = process.env.DISCORD_TOKEN;
+const HUB_VOICE_ID = process.env.HUB_VOICE_ID;
+const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
+const CATEGORY_ID = process.env.CATEGORY_ID;
+
+// ===== DONNÉES =====
 const tempVocals = new Map();
 const GAME_ROLES = {};
 
 const GAMES = [
-  { label: 'Hunt 1896', value: 'Hunt 1896' },
-  { label: 'Minecraft', value: 'Minecraft' },
-  { label: 'Valorant', value: 'Valorant' },
-  { label: 'Clair Obscur: Expedition 33', value: 'Clair Obscur: Expedition 33' },
-  { label: 'Apex Legends', value: 'Apex Legends' },
-  { label: 'League of Legends', value: 'League of Legends' },
-  { label: 'Fortnite', value: 'Fortnite' },
-  { label: 'Hunt Showdown 1896', value: 'Hunt Showdown 1896' },
-  { label: 'Call of Duty: Warzone', value: 'Call of Duty: Warzone' },
-  { label: 'Battlefield 6', value: 'Battlefield 6' },
-  { label: 'Counter‑Strike 2', value: 'Counter‑Strike 2' },
-  { label: 'Roblox', value: 'Roblox' },
-  { label: 'Monster Hunter Wilds', value: 'Monster Hunter Wilds' },
-  { label: 'ARC Raiders', value: 'ARC Raiders' },
-  { label: 'ARK Ascended', value: 'ARK Ascended' },
-  { label: 'GTA Online', value: 'GTA Online' },
-  { label: 'Red Dead Redemption 2', value: 'Red Dead Redemption 2' },
-  { label: 'CloudHeim', value: 'CloudHeim' },
-  { label: 'Valheim', value: 'Valheim' },
-  { label: 'Enshrouded', value: 'Enshrouded' },
-  { label: 'Elden Ring', value: 'Elden Ring' },
-  { label: '7 Days To Die', value: '7 Days To Die' },
-  { label: 'Among Us', value: 'Among Us' },
-  { label: 'Dofus', value: 'Dofus' },
-  { label: 'World Of Warcraft', value: 'World Of Warcraft' },
-  { label: 'Autre (écrire le jeu)', value: 'Other' }
-];
+  'Hunt 1896','Minecraft','Valorant','Clair Obscur: Expedition 33',
+  'Apex Legends','League of Legends','Fortnite','Hunt Showdown 1896',
+  'Call of Duty: Warzone','Battlefield 6','Counter-Strike 2','Roblox',
+  'Monster Hunter Wilds','ARC Raiders','ARK Ascended','GTA Online',
+  'Red Dead Redemption 2','CloudHeim','Valheim','Enshrouded',
+  'Elden Ring','7 Days To Die','Among Us','Dofus','World Of Warcraft'
+].map(g => ({ label: g, value: g }))
+.concat({ label: 'Autre (écrire le jeu)', value: 'OTHER' });
 
-client.once('ready', () => console.log(`✅ Connecté en tant que ${client.user.tag}`));
+// ===== READY =====
+client.once('ready', () => {
+  console.log(`✅ Bot connecté : ${client.user.tag}`);
+});
 
-// Gestion hub vocal
+// ===== HUB VOCAL =====
 client.on('voiceStateUpdate', async (oldState, newState) => {
-  if (!oldState.channel && newState.channelId === process.env.HUB_VOICE_ID) {
-    const modal = new ModalBuilder().setCustomId('create_vocal_modal').setTitle('Créer ton vocal');
+  if (!oldState.channel && newState.channelId === HUB_VOICE_ID) {
+    const modal = new ModalBuilder()
+      .setCustomId('create_vocal')
+      .setTitle('Créer un vocal');
+
     modal.addComponents(
       new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('name').setLabel('Nom du vocal').setStyle(TextInputStyle.Short).setRequired(true)
+        new TextInputBuilder()
+          .setCustomId('name')
+          .setLabel('Nom du vocal')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
       ),
       new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('limit').setLabel('Nombre de joueurs').setStyle(TextInputStyle.Short).setRequired(true)
+        new TextInputBuilder()
+          .setCustomId('limit')
+          .setLabel('Nombre de joueurs')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
       )
     );
+
     await newState.member.send({ content: '🎮 Création du vocal' });
     await newState.member.showModal(modal);
   }
 
   if (oldState.channel && tempVocals.has(oldState.channel.id)) {
-    const data = tempVocals.get(oldState.channel.id);
     if (oldState.channel.members.size === 0) {
-      clearTimeout(data.expire);
       await oldState.channel.delete().catch(() => {});
       tempVocals.delete(oldState.channel.id);
-    } else updateEmbed(oldState.channel);
+    }
   }
-
-  if (newState.channel && tempVocals.has(newState.channel.id)) updateEmbed(newState.channel);
 });
 
-// Modal validé & sélection de jeu
+// ===== INTERACTIONS =====
 client.on('interactionCreate', async interaction => {
-  if (interaction.isModalSubmit() && interaction.customId === 'create_vocal_modal') {
+
+  if (interaction.isModalSubmit() && interaction.customId === 'create_vocal') {
     const name = interaction.fields.getTextInputValue('name');
     const limit = parseInt(interaction.fields.getTextInputValue('limit'));
+
     const menu = new StringSelectMenuBuilder()
-      .setCustomId(`select_game_${interaction.user.id}_${name}_${limit}`)
+      .setCustomId(`select_game_${name}_${limit}`)
       .setPlaceholder('Choisis ton jeu')
       .addOptions(GAMES);
 
-    await interaction.reply({ content: '🎮 Choisis ton jeu', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+    await interaction.reply({
+      ephemeral: true,
+      content: '🎮 Choisis ton jeu',
+      components: [new ActionRowBuilder().addComponents(menu)]
+    });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_game')) {
-    const [, , ownerId, name, limit] = interaction.customId.split('_');
+    const [, name, limit] = interaction.customId.split('_');
     let game = interaction.values[0];
 
-    if (game === 'Other') {
+    if (game === 'OTHER') {
       const modal = new ModalBuilder()
-        .setCustomId(`other_game_${ownerId}_${name}_${limit}`)
-        .setTitle('Écris le nom du jeu');
+        .setCustomId(`other_game_${name}_${limit}`)
+        .setTitle('Nom du jeu');
+
       modal.addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('otherName').setLabel('Nom du jeu').setStyle(TextInputStyle.Short).setRequired(true)
+          new TextInputBuilder()
+            .setCustomId('game')
+            .setLabel('Nom du jeu')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
         )
       );
-      await interaction.user.showModal(modal);
-      return;
+
+      return interaction.showModal(modal);
     }
 
-    createVocal(interaction, game, ownerId, name, limit);
+    createVocal(interaction, name, limit, game);
   }
 
   if (interaction.isModalSubmit() && interaction.customId.startsWith('other_game')) {
-    const [, ownerId, name, limit] = interaction.customId.split('_');
-    const game = interaction.fields.getTextInputValue('otherName');
-    createVocal(interaction, game, ownerId, name, limit);
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith('join_')) {
-    const channel = interaction.guild.channels.cache.get(interaction.customId.split('_')[1]);
-    if (channel) {
-      await interaction.member.voice.setChannel(channel);
-      const data = tempVocals.get(channel.id);
-      if (data) assignGameRole(interaction.member, data.game, interaction.guild);
-    }
-    await interaction.reply({ content: '🎧 Connecté au vocal', ephemeral: true });
+    const [, name, limit] = interaction.customId.split('_');
+    const game = interaction.fields.getTextInputValue('game');
+    createVocal(interaction, name, limit, game);
   }
 });
 
-// Connexion du bot avec le token depuis Render
-client.login(process.env.TOKEN);
+// ===== CREATE VOCAL =====
+async function createVocal(interaction, name, limit, game) {
+  const channel = await interaction.guild.channels.create({
+    name: `🎮 ${name}`,
+    type: ChannelType.GuildVoice,
+    parent: CATEGORY_ID,
+    userLimit: limit
+  });
+
+  await interaction.member.voice.setChannel(channel);
+  await assignRole(interaction.member, game);
+
+  const embed = new EmbedBuilder()
+    .setTitle('🎮 Recherche de mates')
+    .addFields(
+      { name: 'Jeu', value: game },
+      { name: 'Salon', value: channel.name },
+      { name: 'Joueurs', value: `1 / ${limit}` }
+    )
+    .setColor(0x00ff99);
+
+  const button = new ButtonBuilder()
+    .setCustomId(`join_${channel.id}`)
+    .setLabel('➕ Rejoindre')
+    .setStyle(ButtonStyle.Success);
+
+  await interaction.guild.channels.cache
+    .get(LFG_CHANNEL_ID)
+    .send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] });
+
+  tempVocals.set(channel.id, true);
+  await interaction.update({ content: '✅ Vocal créé', components: [] });
+}
+
+// ===== AUTO ROLE =====
+async function assignRole(member, game) {
+  let role = member.guild.roles.cache.find(r => r.name === game);
+  if (!role) role = await member.guild.roles.create({ name: game });
+  if (!member.roles.cache.has(role.id)) await member.roles.add(role);
+}
+
+// ===== LOGIN =====
+client.login(TOKEN);
