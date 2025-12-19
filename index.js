@@ -6,8 +6,12 @@ const {
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
+
 const express = require("express");
 
 /* ===== KEEP ALIVE (OBLIGATOIRE POUR RENDER WEB SERVICE) ===== */
@@ -72,10 +76,14 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   );
 
 
-  /* ➕ CRÉATION */
-  if (!oldState.channelId && newState.channelId === HUB_VOICE_ID) {
-    const member = newState.member;
-    const guild = newState.guild;
+/* ➕ CRÉATION */
+if (
+  newState.channelId === HUB_VOICE_ID &&
+  oldState.channelId !== HUB_VOICE_ID
+) {
+  const member = newState.member;
+  const guild = newState.guild;
+
 
     const isVIP = VIP_ROLE_ID && member.roles.cache.has(VIP_ROLE_ID);
     const last = cooldowns.get(member.id);
@@ -268,12 +276,33 @@ client.on("interactionCreate", async interaction => {
     const data = tempVocals.get(channelId);
     if (!data || interaction.user.id !== data.owner) return;
 
-    const game = interaction.values[0];
-    const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) return;
+    const selected = interaction.values[0];
+const channel = interaction.guild.channels.cache.get(channelId);
+if (!channel) return;
 
-    data.game = game;
-    await channel.setName(`🎮 ${game}`);
+/* ✍️ AUTRE → POPUP TEXTE */
+if (selected === "OTHER") {
+  const modal = new ModalBuilder()
+    .setCustomId(`other_${channelId}`)
+    .setTitle("Nom du jeu");
+
+  const input = new TextInputBuilder()
+    .setCustomId("game_name")
+    .setLabel("Quel est le jeu ?")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(input)
+  );
+
+  return interaction.showModal(modal);
+}
+
+/* 🎮 JEU NORMAL */
+data.game = selected;
+await channel.setName(`🎮 ${selected}`);
+
 
     let role = interaction.guild.roles.cache.find(r => r.name === game);
     if (!role) role = await interaction.guild.roles.create({ name: game });
@@ -292,6 +321,41 @@ client.on("interactionCreate", async interaction => {
 
     await interaction.update({ components: interaction.message.components });
   }
+/* ✍️ MODAL AUTRE JEU */
+if (interaction.isModalSubmit() && interaction.customId.startsWith("other_")) {
+  const channelId = interaction.customId.split("_")[1];
+  const data = tempVocals.get(channelId);
+  if (!data || interaction.user.id !== data.owner) return;
+
+  const game = interaction.fields.getTextInputValue("game_name").trim();
+  if (!game) return;
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  data.game = game;
+  await channel.setName(`🎮 ${game}`);
+
+  let role = interaction.guild.roles.cache.find(r => r.name === game);
+  if (!role) role = await interaction.guild.roles.create({ name: game });
+
+  if (!interaction.member.roles.cache.has(role.id)) {
+    await interaction.member.roles.add(role);
+  }
+
+  if (!data.pinged) {
+    await interaction.guild.channels.cache.get(LFG_CHANNEL_ID).send({
+      content: `🔔 ${role} **Une recherche de mates est lancée !**`,
+      allowedMentions: { roles: [role.id] }
+    });
+    data.pinged = true;
+  }
+
+  await interaction.reply({
+    content: `✅ Jeu défini : **${game}**`,
+    ephemeral: true
+  });
+}
 
   /* 👥 SLOTS */
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
