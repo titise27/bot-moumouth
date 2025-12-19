@@ -168,16 +168,33 @@ const select = new StringSelectMenuBuilder()
 ]
 
       });
-// 📩 DM AU CREATEUR POUR LUI EXPLIQUER LA SUITE
+// 📩 DM AU CREATEUR — UX STREAMER PRO
 try {
-  await member.send(
-    `🎮 **Ton salon vocal est prêt !**\n\n` +
-    `👉 Va dans **#recherche-joueurs** pour **sélectionner le jeu** et lancer la recherche.\n\n` +
-    `🔗 **Lien direct vers ton annonce :**\n${lfgMsg.url}`
-  );
+  const dmEmbed = new EmbedBuilder()
+    .setTitle("🎮 Ton vocal est prêt !")
+    .setDescription(
+      `Tout est en place 👌\n\n` +
+      `🎯 **Étape 1** : choisis le **jeu**\n` +
+      `👥 **Étape 2** : règle le **nombre de joueurs**\n` +
+      `🚀 **Étape 3** : les joueurs peuvent te rejoindre\n\n` +
+      `💡 *L’annonce a été postée dans* **#recherche-joueurs**`
+    )
+    .setColor(0x00ff99)
+    .setFooter({ text: "Bot Moumouth • Bon jeu !" });
+
+  const openBtn = new ButtonBuilder()
+    .setLabel("🔗 Ouvrir mon annonce")
+    .setStyle(ButtonStyle.Link)
+    .setURL(lfgMsg.url);
+
+  await member.send({
+    embeds: [dmEmbed],
+    components: [new ActionRowBuilder().addComponents(openBtn)]
+  });
 } catch (err) {
-  // MP fermés → on ignore
+  // MP fermés → on ignore silencieusement
 }
+
 
 
     tempVocals.set(channel.id, {
