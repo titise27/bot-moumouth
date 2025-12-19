@@ -2,18 +2,20 @@ const {
   Client,
   GatewayIntentBits,
   ChannelType,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   ActionRowBuilder,
+  StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  StringSelectMenuBuilder
-} = require('discord.js');
+  EmbedBuilder
+} = require("discord.js");
+const express = require("express");
 
-require('./server'); // Keep-alive Render
+/* ===== KEEP ALIVE RENDER ===== */
+const app = express();
+app.get("/", (_, res) => res.send("Bot en ligne"));
+app.listen(process.env.PORT || 10000);
 
+/* ===== CLIENT ===== */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,158 +24,228 @@ const client = new Client({
   ]
 });
 
-// ===== CONFIG VIA RENDER =====
+/* ===== CONFIG RENDER ===== */
 const TOKEN = process.env.DISCORD_TOKEN;
-const HUB_VOICE_ID = process.env.HUB_VOICE_ID;
-const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
 const CATEGORY_ID = process.env.CATEGORY_ID;
+const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+const VIP_ROLE_ID = process.env.VIP_ROLE_ID;
 
-// ===== DONNÉES =====
-const tempVocals = new Map();
-const GAME_ROLES = {};
+/* ===== HUBS VOCAUX ===== */
+const HUBS = Object.keys(process.env)
+  .filter(k => k.startsWith("HUB_VOICE_ID_"))
+  .map(k => process.env[k]);
 
+/* ===== JEUX ===== */
 const GAMES = [
-  'Hunt 1896','Minecraft','Valorant','Clair Obscur: Expedition 33',
-  'Apex Legends','League of Legends','Fortnite','Hunt Showdown 1896',
-  'Call of Duty: Warzone','Battlefield 6','Counter-Strike 2','Roblox',
-  'Monster Hunter Wilds','ARC Raiders','ARK Ascended','GTA Online',
-  'Red Dead Redemption 2','CloudHeim','Valheim','Enshrouded',
-  'Elden Ring','7 Days To Die','Among Us','Dofus','World Of Warcraft'
-].map(g => ({ label: g, value: g }))
-.concat({ label: 'Autre (écrire le jeu)', value: 'OTHER' });
+  "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
+  "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
+  "Call of Duty: Warzone","Battlefield 6","Counter-Strike 2","Roblox",
+  "Monster Hunter Wilds","ARC Raiders","ARK Ascended","GTA Online",
+  "Red Dead Redemption 2","CloudHeim","Valheim","Enshrouded",
+  "Elden Ring","7 Days To Die","Among Us","Dofus","World Of Warcraft"
+];
 
-// ===== READY =====
-client.once('ready', () => {
+/* ===== RÈGLES ===== */
+const DEFAULT_LIMIT = 4;
+const VIP_LIMIT = 10;
+const COOLDOWN_MS = 2 * 60 * 1000;
+const BLACKLIST = ["admin", "modo", "fuck", "shit"];
+
+/* ===== DATA ===== */
+const tempVocals = new Map();
+const cooldowns = new Map();
+
+/* ===== READY ===== */
+client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
 });
 
-// ===== HUB VOCAL =====
-client.on('voiceStateUpdate', async (oldState, newState) => {
-  if (!oldState.channel && newState.channelId === HUB_VOICE_ID) {
-    const modal = new ModalBuilder()
-      .setCustomId('create_vocal')
-      .setTitle('Créer un vocal');
+/* ===== HUB VOCAL ===== */
+client.on("voiceStateUpdate", async (oldState, newState) => {
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('name')
-          .setLabel('Nom du vocal')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('limit')
-          .setLabel('Nombre de joueurs')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
+  /* ➕ CRÉATION */
+  if (!oldState.channelId && HUBS.includes(newState.channelId)) {
+    const member = newState.member;
+    const guild = newState.guild;
+
+    const isVIP = VIP_ROLE_ID && member.roles.cache.has(VIP_ROLE_ID);
+    const last = cooldowns.get(member.id);
+
+    if (!isVIP && last && Date.now() - last < COOLDOWN_MS) {
+      await member.voice.disconnect();
+      return log(`⏱ Cooldown refusé : ${member.user.tag}`);
+    }
+
+    const limit = isVIP ? VIP_LIMIT : DEFAULT_LIMIT;
+
+    const channel = await guild.channels.create({
+      name: `🎮 Salon de ${member.user.username}`,
+      type: ChannelType.GuildVoice,
+      parent: CATEGORY_ID,
+      userLimit: limit,
+      permissionOverwrites: [
+        { id: member.id, allow: ["ManageChannels", "MoveMembers"] }
+      ]
+    });
+
+    await member.voice.setChannel(channel);
+    cooldowns.set(member.id, Date.now());
+
+    const embed = new EmbedBuilder()
+      .setTitle("🎮 Recherche de mates")
+      .addFields(
+        { name: "Salon", value: channel.name, inline: true },
+        { name: "Jeu", value: "Non défini", inline: true },
+        { name: "Places", value: `1 / ${limit}`, inline: true }
       )
-    );
+      .setColor(0x00ff99);
 
-    await newState.member.send({ content: '🎮 Création du vocal' });
-    await newState.member.showModal(modal);
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`game_${channel.id}`)
+      .setPlaceholder("Choisir un jeu")
+      .addOptions(
+        ...GAMES.map(g => ({ label: g, value: g })),
+        { label: "Autre (écrire le jeu)", value: "OTHER" }
+      );
+
+    const joinBtn = new ButtonBuilder()
+      .setCustomId(`join_${channel.id}`)
+      .setLabel("➕ Rejoindre")
+      .setStyle(ButtonStyle.Success);
+
+    const lfgMsg = await guild.channels.cache
+      .get(LFG_CHANNEL_ID)
+      .send({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder().addComponents(select),
+          new ActionRowBuilder().addComponents(joinBtn)
+        ]
+      });
+
+    tempVocals.set(channel.id, {
+      owner: member.id,
+      lfgMsgId: lfgMsg.id,
+      limit,
+      game: null
+    });
+
+    log(`🎧 Vocal créé : ${channel.name} | ${member.user.tag}`);
   }
 
+  /* 🔄 UPDATE COMPTEUR */
+  if (newState.channel && tempVocals.has(newState.channel.id)) {
+    updateEmbed(newState.channel);
+  }
+
+  /* ❌ SUPPRESSION */
   if (oldState.channel && tempVocals.has(oldState.channel.id)) {
     if (oldState.channel.members.size === 0) {
+      const data = tempVocals.get(oldState.channel.id);
+      const lfg = await oldState.guild.channels.cache
+        .get(LFG_CHANNEL_ID)
+        .messages.fetch(data.lfgMsgId)
+        .catch(() => null);
+
+      if (lfg) await lfg.delete().catch(() => {});
       await oldState.channel.delete().catch(() => {});
       tempVocals.delete(oldState.channel.id);
+
+      log(`❌ Vocal supprimé : ${oldState.channel.name}`);
     }
   }
 });
 
-// ===== INTERACTIONS =====
-client.on('interactionCreate', async interaction => {
+/* ===== INTERACTIONS ===== */
+client.on("interactionCreate", async interaction => {
 
-  if (interaction.isModalSubmit() && interaction.customId === 'create_vocal') {
-    const name = interaction.fields.getTextInputValue('name');
-    const limit = parseInt(interaction.fields.getTextInputValue('limit'));
+  /* 🎮 MENU JEUX */
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("game_")) {
+    const channelId = interaction.customId.split("_")[1];
+    const data = tempVocals.get(channelId);
+    if (!data || interaction.user.id !== data.owner) {
+      return interaction.reply({ content: "❌ Seul le propriétaire peut choisir le jeu.", ephemeral: true });
+    }
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId(`select_game_${name}_${limit}`)
-      .setPlaceholder('Choisis ton jeu')
-      .addOptions(GAMES);
+    let game = interaction.values[0];
 
-    await interaction.reply({
-      ephemeral: true,
-      content: '🎮 Choisis ton jeu',
-      components: [new ActionRowBuilder().addComponents(menu)]
+    if (game === "OTHER") {
+      return interaction.reply({
+        content: "✍️ Écris le nom du jeu dans le chat.",
+        ephemeral: true
+      });
+    }
+
+    if (BLACKLIST.some(w => game.toLowerCase().includes(w))) {
+      return interaction.reply({ content: "⛔ Jeu interdit.", ephemeral: true });
+    }
+
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) return;
+
+    data.game = game;
+    await channel.setName(`🎮 ${game} | ${interaction.user.username}`);
+
+    let role = interaction.guild.roles.cache.find(r => r.name === game);
+    if (!role) role = await interaction.guild.roles.create({ name: game });
+    if (!interaction.member.roles.cache.has(role.id)) {
+      await interaction.member.roles.add(role);
+    }
+
+    await interaction.update({ components: interaction.message.components });
+    updateEmbed(channel, role);
+  }
+
+  /* ➕ REJOINDRE */
+  if (interaction.isButton() && interaction.customId.startsWith("join_")) {
+    const channelId = interaction.customId.split("_")[1];
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) {
+      return interaction.reply({ content: "❌ Salon expiré.", ephemeral: true });
+    }
+    await interaction.member.voice.setChannel(channel);
+    await interaction.reply({ content: "✅ Tu as rejoint le vocal.", ephemeral: true });
+  }
+});
+
+/* ===== UPDATE EMBED ===== */
+async function updateEmbed(channel, role) {
+  const data = tempVocals.get(channel.id);
+  if (!data) return;
+
+  const lfg = await channel.guild.channels.cache
+    .get(LFG_CHANNEL_ID)
+    .messages.fetch(data.lfgMsgId)
+    .catch(() => null);
+
+  if (!lfg) return;
+
+  const embed = EmbedBuilder.from(lfg.embeds[0]);
+
+  embed.spliceFields(2, 1, {
+    name: "Places",
+    value: `${channel.members.size} / ${data.limit}`,
+    inline: true
+  });
+
+  if (data.game && role) {
+    embed.spliceFields(1, 1, {
+      name: "Jeu",
+      value: `${data.game} — ${role}`,
+      inline: true
     });
   }
 
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_game')) {
-    const [, name, limit] = interaction.customId.split('_');
-    let game = interaction.values[0];
-
-    if (game === 'OTHER') {
-      const modal = new ModalBuilder()
-        .setCustomId(`other_game_${name}_${limit}`)
-        .setTitle('Nom du jeu');
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('game')
-            .setLabel('Nom du jeu')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-        )
-      );
-
-      return interaction.showModal(modal);
-    }
-
-    createVocal(interaction, name, limit, game);
-  }
-
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('other_game')) {
-    const [, name, limit] = interaction.customId.split('_');
-    const game = interaction.fields.getTextInputValue('game');
-    createVocal(interaction, name, limit, game);
-  }
-});
-
-// ===== CREATE VOCAL =====
-async function createVocal(interaction, name, limit, game) {
-  const channel = await interaction.guild.channels.create({
-    name: `🎮 ${name}`,
-    type: ChannelType.GuildVoice,
-    parent: CATEGORY_ID,
-    userLimit: limit
-  });
-
-  await interaction.member.voice.setChannel(channel);
-  await assignRole(interaction.member, game);
-
-  const embed = new EmbedBuilder()
-    .setTitle('🎮 Recherche de mates')
-    .addFields(
-      { name: 'Jeu', value: game },
-      { name: 'Salon', value: channel.name },
-      { name: 'Joueurs', value: `1 / ${limit}` }
-    )
-    .setColor(0x00ff99);
-
-  const button = new ButtonBuilder()
-    .setCustomId(`join_${channel.id}`)
-    .setLabel('➕ Rejoindre')
-    .setStyle(ButtonStyle.Success);
-
-  await interaction.guild.channels.cache
-    .get(LFG_CHANNEL_ID)
-    .send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] });
-
-  tempVocals.set(channel.id, true);
-  await interaction.update({ content: '✅ Vocal créé', components: [] });
+  await lfg.edit({ embeds: [embed] });
 }
 
-// ===== AUTO ROLE =====
-async function assignRole(member, game) {
-  let role = member.guild.roles.cache.find(r => r.name === game);
-  if (!role) role = await member.guild.roles.create({ name: game });
-  if (!member.roles.cache.has(role.id)) await member.roles.add(role);
+/* ===== LOGS ===== */
+function log(msg) {
+  const ch = client.channels.cache.get(LOG_CHANNEL_ID);
+  if (ch) ch.send(msg);
 }
 
-// ===== LOGIN =====
+/* ===== LOGIN ===== */
 client.login(TOKEN);
+
