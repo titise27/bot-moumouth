@@ -277,5 +277,9 @@ client.on("interactionCreate", async interaction => {
 
 /* ===== LOGIN ===== */
 console.log("TOKEN PRESENT =", !!TOKEN);
-client.login(TOKEN);
+
+client.login(TOKEN)
+  .then(() => console.log("LOGIN OK"))
+  .catch(err => console.error("LOGIN ERROR", err));
+
 
