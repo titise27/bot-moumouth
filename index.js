@@ -128,6 +128,19 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       )
       .setColor(0x00ff99);
 
+const slotSelect = new StringSelectMenuBuilder()
+  .setCustomId(`slots_${channel.id}`)
+  .setPlaceholder("👥 Nombre de joueurs")
+  .addOptions(
+    { label: "2 joueurs", value: "2" },
+    { label: "3 joueurs", value: "3" },
+    { label: "4 joueurs", value: "4" },
+    { label: "5 joueurs", value: "5" },
+    { label: "6 joueurs", value: "6" },
+    { label: "8 joueurs", value: "8" },
+    { label: "10 joueurs", value: "10" }
+  );
+
     const options = [
   ...GAMES.slice(0, 24).map(g => ({ label: g, value: g })),
   { label: "Autre (écrire le jeu)", value: "OTHER" }
@@ -149,9 +162,11 @@ const select = new StringSelectMenuBuilder()
       .send({
         embeds: [embed],
         components: [
-          new ActionRowBuilder().addComponents(select),
-          new ActionRowBuilder().addComponents(joinBtn)
-        ]
+  new ActionRowBuilder().addComponents(select),      // 🎮 jeux
+  new ActionRowBuilder().addComponents(slotSelect),  // 👥 slots
+  new ActionRowBuilder().addComponents(joinBtn)      // ➕ rejoindre
+]
+
       });
 // 📩 DM AU CREATEUR POUR LUI EXPLIQUER LA SUITE
 try {
@@ -245,6 +260,34 @@ client.on("interactionCreate", async interaction => {
     await interaction.update({ components: interaction.message.components });
     updateEmbed(channel, role);
   }
+  /* 👥 MENU NOMBRE DE JOUEURS */
+if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
+  const channelId = interaction.customId.split("_")[1];
+  const data = tempVocals.get(channelId);
+
+  if (!data || interaction.user.id !== data.owner) {
+    return interaction.reply({
+      content: "❌ Seul le créateur peut modifier le nombre de places.",
+      ephemeral: true
+    });
+  }
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  const limit = parseInt(interaction.values[0], 10);
+
+  await channel.setUserLimit(limit);
+  data.limit = limit;
+
+  await interaction.reply({
+    content: `👥 Nombre de places défini sur **${limit}**`,
+    ephemeral: true
+  });
+
+  updateEmbed(channel);
+}
+
 
   /* ➕ REJOINDRE */
   if (interaction.isButton() && interaction.customId.startsWith("join_")) {
