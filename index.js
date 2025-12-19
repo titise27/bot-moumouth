@@ -266,7 +266,7 @@ client.on("interactionCreate", async interaction => {
     if (!channel) return;
 
     data.game = game;
-    await channel.setName(`🎮 ${game} ;
+    await channel.setName(`🎮 ${game}`);
 
     let role = interaction.guild.roles.cache.find(r => r.name === game);
     if (!role) role = await interaction.guild.roles.create({ name: game });
