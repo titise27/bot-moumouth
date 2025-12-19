@@ -195,64 +195,77 @@ client.on("interactionCreate", async interaction => {
     return interaction.showModal(modal);
   }
 
-  /* 📝 MODAL CONFIG */
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
-    const channelId = interaction.customId.split("_")[1];
-    const data = tempVocals.get(channelId);
-    if (!data || interaction.user.id !== data.owner) return;
+/* 📝 MODAL CONFIG */
+if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
+  const channelId = interaction.customId.split("_")[1];
+  const data = tempVocals.get(channelId);
 
-    const game = interaction.fields.getTextInputValue("game").trim();
-    const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
-
-    if (!game || isNaN(limit)) {
-      return interaction.reply({ content: "❌ Valeurs invalides", ephemeral: true });
-    }
-
-    const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) return;
-
-    await channel.setName(`🎮 ${game}`);
-    await channel.setUserLimit(limit);
-
-    data.game = game;
-    data.limit = limit;
-
-    let role = interaction.guild.roles.cache.find(r => r.name === game);
-    if (!role) role = await interaction.guild.roles.create({ name: game });
-
-    await interaction.member.roles.add(role);
-
-    /* 📣 EMBED LFG */
-    const guild = client.guilds.cache.get(channel.guild.id);
-
-const embed = new EmbedBuilder()
-  .setTitle("🎮 Recherche de mates")
-  .addFields(
-    { name: "Salon", value: channel.name, inline: true },
-    { name: "Jeu", value: game, inline: true },
-    { name: "Places", value: `1 / ${limit}`, inline: true }
-  )
-  .setColor(0x00ff99);
-
-const joinBtn = new ButtonBuilder()
-  .setCustomId(`join_${channel.id}`)
-  .setLabel("➕ Rejoindre")
-  .setStyle(ButtonStyle.Success);
-
-const lfgMsg = await guild.channels.cache
-  .get(LFG_CHANNEL_ID)
-  .send({
-    content: `🔔 ${role}`,
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(joinBtn)],
-    allowedMentions: { roles: [role.id] }
-  });
-
-data.lfgMsgId = lfgMsg.id;
-
-
-    return interaction.reply({ content: "✅ Salon configuré", ephemeral: true });
+  if (!data || interaction.user.id !== data.owner) {
+    return interaction.reply({ content: "❌ Action non autorisée.", ephemeral: true });
   }
+
+  // ✅ RÉPONSE IMMÉDIATE (CRUCIAL)
+  await interaction.deferReply({ ephemeral: true });
+
+  const game = interaction.fields.getTextInputValue("game").trim();
+  const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
+
+  if (!game || isNaN(limit) || limit < 1 || limit > 99) {
+    return interaction.editReply("❌ Valeurs invalides.");
+  }
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.editReply("❌ Salon introuvable.");
+  }
+
+  /* 🎮 SALON */
+  data.game = game;
+  data.limit = limit;
+
+  await channel.setName(`🎮 ${game}`).catch(() => {});
+  await channel.setUserLimit(limit).catch(() => {});
+
+  /* 🎭 RÔLE */
+  let role = interaction.guild.roles.cache.find(r => r.name === game);
+  if (!role) {
+    role = await interaction.guild.roles.create({ name: game });
+  }
+
+  if (!interaction.member.roles.cache.has(role.id)) {
+    await interaction.member.roles.add(role).catch(() => {});
+  }
+
+  /* 📣 MESSAGE LFG */
+  const embed = new EmbedBuilder()
+    .setTitle("🎮 Recherche de mates")
+    .addFields(
+      { name: "Salon", value: channel.name, inline: true },
+      { name: "Jeu", value: game, inline: true },
+      { name: "Places", value: `1 / ${limit}`, inline: true }
+    )
+    .setColor(0x00ff99);
+
+  const joinBtn = new ButtonBuilder()
+    .setCustomId(`join_${channel.id}`)
+    .setLabel("➕ Rejoindre")
+    .setStyle(ButtonStyle.Success);
+
+  const lfgChannel = interaction.guild.channels.cache.get(LFG_CHANNEL_ID);
+  if (lfgChannel) {
+    const lfgMsg = await lfgChannel.send({
+      content: `🔔 ${role}`,
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(joinBtn)],
+      allowedMentions: { roles: [role.id] }
+    });
+
+    data.lfgMsgId = lfgMsg.id;
+  }
+
+  return interaction.editReply("✅ Salon configuré avec succès !");
+}
+
 
   /* ➕ JOIN */
   if (interaction.isButton() && interaction.customId.startsWith("join_")) {
