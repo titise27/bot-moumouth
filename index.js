@@ -153,6 +153,16 @@ const select = new StringSelectMenuBuilder()
           new ActionRowBuilder().addComponents(joinBtn)
         ]
       });
+// 📩 DM AU CREATEUR POUR LUI EXPLIQUER LA SUITE
+try {
+  await interaction.member.send(
+    `🎮 **Ton salon vocal est prêt !**\n\n` +
+    `👉 Va dans **#recherche-joueurs** pour **sélectionner le jeu** et lancer la recherche.\n\n` +
+    `🔗 **Lien direct vers ton annonce :**\n${lfgMsg.url}`
+  );
+} catch (err) {
+  // MP fermés → on ignore
+}
 
     tempVocals.set(channel.id, {
       owner: member.id,
