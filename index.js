@@ -201,23 +201,71 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
   const data = tempVocals.get(channelId);
 
   if (!data || interaction.user.id !== data.owner) {
-    return interaction.reply({ content: "❌ Action non autorisée.", ephemeral: true });
+    return interaction.reply({ content: "❌ Non autorisé", ephemeral: true });
   }
 
-  // ✅ RÉPONSE IMMÉDIATE (CRUCIAL)
+  // ✅ IMPORTANT : réponse immédiate
   await interaction.deferReply({ ephemeral: true });
 
-  const game = interaction.fields.getTextInputValue("game").trim();
-  const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
+  try {
+    const game = interaction.fields.getTextInputValue("game").trim();
+    const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
 
-  if (!game || isNaN(limit) || limit < 1 || limit > 99) {
-    return interaction.editReply("❌ Valeurs invalides.");
-  }
+    if (!game || isNaN(limit) || limit < 1 || limit > 99) {
+      return interaction.editReply("❌ Valeurs invalides.");
+    }
 
-  const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) {
-    return interaction.editReply("❌ Salon introuvable.");
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) {
+      return interaction.editReply("❌ Salon introuvable.");
+    }
+
+    data.game = game;
+    data.limit = limit;
+
+    await channel.setName(`🎮 ${game}`);
+    await channel.setUserLimit(limit);
+
+    let role = interaction.guild.roles.cache.find(r => r.name === game);
+    if (!role) role = await interaction.guild.roles.create({ name: game });
+
+    if (!interaction.member.roles.cache.has(role.id)) {
+      await interaction.member.roles.add(role);
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("🎮 Recherche de mates")
+      .addFields(
+        { name: "Salon", value: channel.name, inline: true },
+        { name: "Jeu", value: game, inline: true },
+        { name: "Places", value: `1 / ${limit}`, inline: true }
+      )
+      .setColor(0x00ff99);
+
+    const joinBtn = new ButtonBuilder()
+      .setCustomId(`join_${channel.id}`)
+      .setLabel("➕ Rejoindre")
+      .setStyle(ButtonStyle.Success);
+
+    const lfgChannel = interaction.guild.channels.cache.get(LFG_CHANNEL_ID);
+    if (lfgChannel) {
+      const lfgMsg = await lfgChannel.send({
+        content: `🔔 ${role}`,
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(joinBtn)],
+        allowedMentions: { roles: [role.id] }
+      });
+
+      data.lfgMsgId = lfgMsg.id;
+    }
+
+    return interaction.editReply("✅ Salon configuré avec succès !");
+  } catch (err) {
+    console.error("MODAL ERROR:", err);
+    return interaction.editReply("❌ Erreur lors de la configuration.");
   }
+}
+
 
   /* 🎮 SALON */
   data.game = game;
