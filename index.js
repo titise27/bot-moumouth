@@ -140,21 +140,29 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   }
 
   /* ❌ SUPPRESSION */
-  if (oldState.channel && tempVocals.has(oldState.channel.id)) {
-    if (oldState.channel.members.size === 0) {
-      const data = tempVocals.get(oldState.channel.id);
-      const lfg = await oldState.guild.channels.cache
-        .get(LFG_CHANNEL_ID)
-        .messages.fetch(data.lfgMsgId)
-        .catch(() => null);
+  if (
+  oldState.channelId &&
+  oldState.channelId !== newState.channelId &&
+  tempVocals.has(oldState.channelId)
+) {
+  const channel = oldState.channel;
 
-      if (lfg) await lfg.delete().catch(() => {});
-      await oldState.channel.delete().catch(() => {});
-      tempVocals.delete(oldState.channel.id);
+  if (channel.members.size === 0) {
+    const data = tempVocals.get(channel.id);
 
-      log(`❌ Vocal supprimé : ${oldState.channel.name}`);
-    }
+    const lfg = await channel.guild.channels.cache
+      .get(LFG_CHANNEL_ID)
+      ?.messages.fetch(data.lfgMsgId)
+      .catch(() => null);
+
+    if (lfg) await lfg.delete().catch(() => {});
+    await channel.delete().catch(() => {});
+    tempVocals.delete(channel.id);
+
+    log(`❌ Vocal supprimé : ${channel.name}`);
   }
+}
+
 });
 
 /* ===== INTERACTIONS ===== */
