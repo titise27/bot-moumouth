@@ -24,46 +24,27 @@ const client = new Client({
   ]
 });
 
-/* ===== CONFIG RENDER ===== */
+/* ===== CONFIG ===== */
 const TOKEN = process.env.DISCORD_TOKEN;
 const CATEGORY_ID = process.env.CATEGORY_ID;
 const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const VIP_ROLE_ID = process.env.VIP_ROLE_ID;
 
-/* ===== HUBS VOCAUX ===== */
+/* ===== HUBS ===== */
 const HUBS = Object.keys(process.env)
   .filter(k => k.startsWith("HUB_VOICE_ID_"))
   .map(k => process.env[k]);
 
 /* ===== JEUX ===== */
 const GAMES = [
-  "Hunt 1896",
-  "Minecraft",
-  "Valorant",
-  "Clair Obscur: Expedition 33",
-  "Apex Legends",
-  "League of Legends",
-  "Fortnite",
-  "Hunt Showdown 1896",
-  "Call of Duty: Warzone",
-  "Battlefield 6",
-  "Counter-Strike 2",
-  "Monster Hunter Wilds",
-  "ARC Raiders",
-  "ARK Ascended",
-  "GTA Online",
-  "Red Dead Redemption 2",
-  "CloudHeim",
-  "Valheim",
-  "Enshrouded",
-  "Elden Ring",
-  "7 Days To Die",
-  "Among Us",
-  "Dofus",
-  "World Of Warcraft"
-]; // ⚠️ EXACTEMENT 24 JEUX
-
+  "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
+  "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
+  "Call of Duty: Warzone","Battlefield 6","Counter-Strike 2",
+  "Monster Hunter Wilds","ARC Raiders","ARK Ascended","GTA Online",
+  "Red Dead Redemption 2","CloudHeim","Valheim","Enshrouded",
+  "Elden Ring","7 Days To Die","Among Us","Dofus","World Of Warcraft"
+];
 
 /* ===== RÈGLES ===== */
 const DEFAULT_LIMIT = 4;
@@ -79,7 +60,6 @@ const cooldowns = new Map();
 client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
 });
-
 
 /* ===== HUB VOCAL ===== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
@@ -121,114 +101,92 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       )
       .setColor(0x00ff99);
 
-const slotSelect = new StringSelectMenuBuilder()
-  .setCustomId(`slots_${channel.id}`)
-  .setPlaceholder("👥 Nombre de joueurs")
-  .addOptions(
-    { label: "2 joueurs", value: "2" },
-    { label: "3 joueurs", value: "3" },
-    { label: "4 joueurs", value: "4" },
-    { label: "5 joueurs", value: "5" },
-    { label: "6 joueurs", value: "6" },
-    { label: "8 joueurs", value: "8" },
-    { label: "10 joueurs", value: "10" }
-  );
+    const gameSelect = new StringSelectMenuBuilder()
+      .setCustomId(`game_${channel.id}`)
+      .setPlaceholder("Choisir un jeu")
+      .addOptions(
+        ...GAMES.map(g => ({ label: g, value: g })),
+        { label: "Autre (écrire le jeu)", value: "OTHER" }
+      );
 
-    const options = [
-  ...GAMES.slice(0, 24).map(g => ({ label: g, value: g })),
-  { label: "Autre (écrire le jeu)", value: "OTHER" }
-];
-
-const select = new StringSelectMenuBuilder()
-  .setCustomId(`game_${channel.id}`)
-  .setPlaceholder("Choisir un jeu")
-  .addOptions(options);
-
+    const slotSelect = new StringSelectMenuBuilder()
+      .setCustomId(`slots_${channel.id}`)
+      .setPlaceholder("👥 Nombre de joueurs")
+      .addOptions(
+        { label: "2 joueurs", value: "2" },
+        { label: "3 joueurs", value: "3" },
+        { label: "4 joueurs", value: "4" },
+        { label: "5 joueurs", value: "5" },
+        { label: "6 joueurs", value: "6" },
+        { label: "8 joueurs", value: "8" },
+        { label: "10 joueurs", value: "10" }
+      );
 
     const joinBtn = new ButtonBuilder()
       .setCustomId(`join_${channel.id}`)
       .setLabel("➕ Rejoindre")
       .setStyle(ButtonStyle.Success);
 
-    const lfgMsg = await guild.channels.cache
-      .get(LFG_CHANNEL_ID)
-      .send({
-        embeds: [embed],
-        components: [
-  new ActionRowBuilder().addComponents(select),      // 🎮 jeux
-  new ActionRowBuilder().addComponents(slotSelect),  // 👥 slots
-  new ActionRowBuilder().addComponents(joinBtn)      // ➕ rejoindre
-]
-
-      });
-// 📩 DM AU CREATEUR — UX STREAMER PRO
-try {
-  const dmEmbed = new EmbedBuilder()
-    .setTitle("🎮 Ton vocal est prêt !")
-    .setDescription(
-      `Tout est en place 👌\n\n` +
-      `🎯 **Étape 1** : choisis le **jeu**\n` +
-      `👥 **Étape 2** : règle le **nombre de joueurs**\n` +
-      `🚀 **Étape 3** : les joueurs peuvent te rejoindre\n\n` +
-      `💡 *L’annonce a été postée dans* **#recherche-joueurs**`
-    )
-    .setColor(0x00ff99)
-    .setFooter({ text: "Bot Moumouth • Bon jeu !" });
-
-  const openBtn = new ButtonBuilder()
-    .setLabel("🔗 Ouvrir mon annonce")
-    .setStyle(ButtonStyle.Link)
-    .setURL(lfgMsg.url);
-
-  await member.send({
-    embeds: [dmEmbed],
-    components: [new ActionRowBuilder().addComponents(openBtn)]
-  });
-} catch (err) {
-  // MP fermés → on ignore silencieusement
-}
-
-
+    const lfgMsg = await guild.channels.cache.get(LFG_CHANNEL_ID).send({
+      embeds: [embed],
+      components: [
+        new ActionRowBuilder().addComponents(gameSelect),
+        new ActionRowBuilder().addComponents(slotSelect),
+        new ActionRowBuilder().addComponents(joinBtn)
+      ]
+    });
 
     tempVocals.set(channel.id, {
       owner: member.id,
       lfgMsgId: lfgMsg.id,
       limit,
-      game: null
+      game: null,
+      pinged: false,
+      reminded: false
     });
 
-    log(`🎧 Vocal créé : ${channel.name} | ${member.user.tag}`);
-  }
+    /* ⏰ RAPPEL AUTO */
+    setTimeout(async () => {
+      const data = tempVocals.get(channel.id);
+      if (!data || data.reminded || !data.game) return;
 
-  /* 🔄 UPDATE COMPTEUR */
-  if (newState.channel && tempVocals.has(newState.channel.id)) {
-    updateEmbed(newState.channel);
+      const ch = guild.channels.cache.get(channel.id);
+      if (!ch || ch.members.size > 1) return;
+
+      const role = guild.roles.cache.find(r => r.name === data.game);
+      const lfg = guild.channels.cache.get(LFG_CHANNEL_ID);
+
+      if (role && lfg) {
+        await lfg.send({
+          content: `⏰ ${role} **Il reste de la place pour jouer !**`,
+          allowedMentions: { roles: [role.id] }
+        });
+        data.reminded = true;
+      }
+    }, 3 * 60 * 1000);
+
+    log(`🎧 Vocal créé : ${channel.name}`);
   }
 
   /* ❌ SUPPRESSION */
   if (
-  oldState.channelId &&
-  oldState.channelId !== newState.channelId &&
-  tempVocals.has(oldState.channelId)
-) {
-  const channel = oldState.channel;
+    oldState.channelId &&
+    oldState.channelId !== newState.channelId &&
+    tempVocals.has(oldState.channelId)
+  ) {
+    const channel = oldState.channel;
+    if (channel.members.size === 0) {
+      const data = tempVocals.get(channel.id);
+      const lfg = await channel.guild.channels.cache
+        .get(LFG_CHANNEL_ID)
+        ?.messages.fetch(data.lfgMsgId)
+        .catch(() => null);
 
-  if (channel.members.size === 0) {
-    const data = tempVocals.get(channel.id);
-
-    const lfg = await channel.guild.channels.cache
-      .get(LFG_CHANNEL_ID)
-      ?.messages.fetch(data.lfgMsgId)
-      .catch(() => null);
-
-    if (lfg) await lfg.delete().catch(() => {});
-    await channel.delete().catch(() => {});
-    tempVocals.delete(channel.id);
-
-    log(`❌ Vocal supprimé : ${channel.name}`);
+      if (lfg) await lfg.delete().catch(() => {});
+      await channel.delete().catch(() => {});
+      tempVocals.delete(channel.id);
+    }
   }
-}
-
 });
 
 /* ===== INTERACTIONS ===== */
@@ -239,18 +197,10 @@ client.on("interactionCreate", async interaction => {
     const channelId = interaction.customId.split("_")[1];
     const data = tempVocals.get(channelId);
     if (!data || interaction.user.id !== data.owner) {
-      return interaction.reply({ content: "❌ Seul le propriétaire peut choisir le jeu.", ephemeral: true });
+      return interaction.reply({ content: "❌ Seul le créateur peut choisir le jeu.", ephemeral: true });
     }
 
-    let game = interaction.values[0];
-
-    if (game === "OTHER") {
-      return interaction.reply({
-        content: "✍️ Écris le nom du jeu dans le chat.",
-        ephemeral: true
-      });
-    }
-
+    const game = interaction.values[0];
     if (BLACKLIST.some(w => game.toLowerCase().includes(w))) {
       return interaction.reply({ content: "⛔ Jeu interdit.", ephemeral: true });
     }
@@ -267,82 +217,54 @@ client.on("interactionCreate", async interaction => {
       await interaction.member.roles.add(role);
     }
 
+    if (!data.pinged) {
+      await interaction.guild.channels.cache.get(LFG_CHANNEL_ID).send({
+        content: `🔔 ${role} **Une recherche de mates est lancée !**`,
+        allowedMentions: { roles: [role.id] }
+      });
+      data.pinged = true;
+    }
+
     await interaction.update({ components: interaction.message.components });
-    updateEmbed(channel, role);
-  }
-  /* 👥 MENU NOMBRE DE JOUEURS */
-if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
-  const channelId = interaction.customId.split("_")[1];
-  const data = tempVocals.get(channelId);
-
-  if (!data || interaction.user.id !== data.owner) {
-    return interaction.reply({
-      content: "❌ Seul le créateur peut modifier le nombre de places.",
-      ephemeral: true
-    });
   }
 
-  const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) return;
+  /* 👥 MENU SLOTS */
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
+    const channelId = interaction.customId.split("_")[1];
+    const data = tempVocals.get(channelId);
+    if (!data || interaction.user.id !== data.owner) return;
 
-  const limit = parseInt(interaction.values[0], 10);
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) return;
 
-  await channel.setUserLimit(limit);
-  data.limit = limit;
+    const limit = parseInt(interaction.values[0], 10);
+    await channel.setUserLimit(limit);
+    data.limit = limit;
 
-  await interaction.reply({
-    content: `👥 Nombre de places défini sur **${limit}**`,
-    ephemeral: true
-  });
-
-  updateEmbed(channel);
-}
-
+    await interaction.reply({ content: `👥 Limite définie à ${limit}`, ephemeral: true });
+  }
 
   /* ➕ REJOINDRE */
   if (interaction.isButton() && interaction.customId.startsWith("join_")) {
     const channelId = interaction.customId.split("_")[1];
     const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) {
-      return interaction.reply({ content: "❌ Salon expiré.", ephemeral: true });
-    }
+    if (!channel) return;
+
     await interaction.member.voice.setChannel(channel);
-    await interaction.reply({ content: "✅ Tu as rejoint le vocal.", ephemeral: true });
+
+    const data = tempVocals.get(channelId);
+    if (data?.game) {
+      let role = interaction.guild.roles.cache.find(r => r.name === data.game);
+      if (role && !interaction.member.roles.cache.has(role.id)) {
+        await interaction.member.roles.add(role);
+      }
+    }
+
+    await interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
   }
 });
 
-/* ===== UPDATE EMBED ===== */
-async function updateEmbed(channel, role) {
-  const data = tempVocals.get(channel.id);
-  if (!data) return;
-
-  const lfg = await channel.guild.channels.cache
-    .get(LFG_CHANNEL_ID)
-    .messages.fetch(data.lfgMsgId)
-    .catch(() => null);
-
-  if (!lfg) return;
-
-  const embed = EmbedBuilder.from(lfg.embeds[0]);
-
-  embed.spliceFields(2, 1, {
-    name: "Places",
-    value: `${channel.members.size} / ${data.limit}`,
-    inline: true
-  });
-
-  if (data.game && role) {
-    embed.spliceFields(1, 1, {
-      name: "Jeu",
-      value: `${data.game} — ${role}`,
-      inline: true
-    });
-  }
-
-  await lfg.edit({ embeds: [embed] });
-}
-
-/* ===== LOGS ===== */
+/* ===== LOG ===== */
 function log(msg) {
   const ch = client.channels.cache.get(LOG_CHANNEL_ID);
   if (ch) ch.send(msg);
@@ -350,4 +272,3 @@ function log(msg) {
 
 /* ===== LOGIN ===== */
 client.login(TOKEN);
-
