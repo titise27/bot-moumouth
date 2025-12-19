@@ -57,7 +57,9 @@ const cooldowns = new Map();
 /* ===== READY ===== */
 client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
+  log("🟢 Bot démarré — logs OK");
 });
+
 
 /* ===== VOICE STATE ===== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
