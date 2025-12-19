@@ -202,7 +202,6 @@ if (
 ) {
   const channel = oldState.channel;
 
-  // Petite attente pour laisser Discord mettre à jour les membres
   setTimeout(async () => {
     if (!channel || channel.members.size > 0) return;
 
@@ -226,9 +225,11 @@ if (
   }, 1000);
 }
 
+}); // 🧠 ← CETTE LIGNE MANQUAIT
 
 /* ===== INTERACTIONS ===== */
 client.on("interactionCreate", async interaction => {
+
 
   /* 🎮 JEU */
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("game_")) {
