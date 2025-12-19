@@ -60,6 +60,14 @@ const cooldowns = new Map();
 client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
 });
+/* ===== DEBUG VOICE ===== */
+client.on("voiceStateUpdate", (oldState, newState) => {
+  console.log(
+    "VOICE EVENT:",
+    "OLD =", oldState.channelId,
+    "NEW =", newState.channelId
+  );
+});
 
 /* ===== HUB VOCAL ===== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
