@@ -10,7 +10,7 @@ const {
 } = require("discord.js");
 const express = require("express");
 
-/* ===== KEEP ALIVE RENDER ===== */
+/* ===== KEEP ALIVE ===== */
 const app = express();
 app.get("/", (_, res) => res.send("Bot en ligne"));
 app.listen(process.env.PORT || 10000);
@@ -26,17 +26,13 @@ const client = new Client({
 
 /* ===== CONFIG ===== */
 const TOKEN = process.env.DISCORD_TOKEN;
+const HUB_VOICE_ID = process.env.HUB_VOICE_ID;
 const CATEGORY_ID = process.env.CATEGORY_ID;
 const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const VIP_ROLE_ID = process.env.VIP_ROLE_ID;
 
-/* ===== HUBS ===== */
-const HUBS = Object.keys(process.env)
-  .filter(k => k.startsWith("HUB_VOICE_ID_"))
-  .map(k => process.env[k]);
-
-/* ===== JEUX ===== */
+/* ===== JEUX (24) ===== */
 const GAMES = [
   "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
   "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
@@ -50,7 +46,6 @@ const GAMES = [
 const DEFAULT_LIMIT = 4;
 const VIP_LIMIT = 10;
 const COOLDOWN_MS = 2 * 60 * 1000;
-const BLACKLIST = ["admin", "modo", "fuck", "shit"];
 
 /* ===== DATA ===== */
 const tempVocals = new Map();
@@ -61,11 +56,11 @@ client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
 });
 
-/* ===== HUB VOCAL ===== */
+/* ===== VOICE STATE ===== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
 
   /* ➕ CRÉATION */
-  if (!oldState.channelId && HUBS.includes(newState.channelId)) {
+  if (!oldState.channelId && newState.channelId === HUB_VOICE_ID) {
     const member = newState.member;
     const guild = newState.guild;
 
@@ -74,7 +69,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
     if (!isVIP && last && Date.now() - last < COOLDOWN_MS) {
       await member.voice.disconnect();
-      return log(`⏱ Cooldown refusé : ${member.user.tag}`);
+      return;
     }
 
     const limit = isVIP ? VIP_LIMIT : DEFAULT_LIMIT;
@@ -135,32 +130,29 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         new ActionRowBuilder().addComponents(joinBtn)
       ]
     });
-// 📩 DM AU CRÉATEUR — GUIDAGE UX
-try {
-  const dmEmbed = new EmbedBuilder()
-    .setTitle("🎮 Ton salon vocal est prêt !")
-    .setDescription(
-      `Tout est en place 👌\n\n` +
-      `🎯 **Étape 1** : choisis le **jeu** dans l’annonce\n` +
-      `👥 **Étape 2** : règle le **nombre de joueurs**\n` +
-      `🔔 **Étape 3** : les joueurs sont notifiés automatiquement\n\n` +
-      `💡 L’annonce est visible dans **#recherche-joueurs**`
-    )
-    .setColor(0x00ff99)
-    .setFooter({ text: "Bot Moumouth • Bon jeu !" });
 
-  const openBtn = new ButtonBuilder()
-    .setLabel("🔗 Ouvrir mon annonce")
-    .setStyle(ButtonStyle.Link)
-    .setURL(lfgMsg.url);
+    /* 📩 DM AU CRÉATEUR */
+    try {
+      const dmEmbed = new EmbedBuilder()
+        .setTitle("🎮 Ton vocal est prêt !")
+        .setDescription(
+          "🎯 Choisis le **jeu**\n" +
+          "👥 Règle le **nombre de joueurs**\n" +
+          "🔔 Les joueurs seront notifiés\n\n" +
+          "📍 Annonce postée dans **#recherche-joueurs**"
+        )
+        .setColor(0x00ff99);
 
-  await member.send({
-    embeds: [dmEmbed],
-    components: [new ActionRowBuilder().addComponents(openBtn)]
-  });
-} catch (err) {
-  // MP fermés → on ignore sans erreur
-}
+      const openBtn = new ButtonBuilder()
+        .setLabel("🔗 Ouvrir mon annonce")
+        .setStyle(ButtonStyle.Link)
+        .setURL(lfgMsg.url);
+
+      await member.send({
+        embeds: [dmEmbed],
+        components: [new ActionRowBuilder().addComponents(openBtn)]
+      });
+    } catch {}
 
     tempVocals.set(channel.id, {
       owner: member.id,
@@ -190,8 +182,6 @@ try {
         data.reminded = true;
       }
     }, 3 * 60 * 1000);
-
-    log(`🎧 Vocal créé : ${channel.name}`);
   }
 
   /* ❌ SUPPRESSION */
@@ -218,19 +208,13 @@ try {
 /* ===== INTERACTIONS ===== */
 client.on("interactionCreate", async interaction => {
 
-  /* 🎮 MENU JEUX */
+  /* 🎮 JEU */
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("game_")) {
     const channelId = interaction.customId.split("_")[1];
     const data = tempVocals.get(channelId);
-    if (!data || interaction.user.id !== data.owner) {
-      return interaction.reply({ content: "❌ Seul le créateur peut choisir le jeu.", ephemeral: true });
-    }
+    if (!data || interaction.user.id !== data.owner) return;
 
     const game = interaction.values[0];
-    if (BLACKLIST.some(w => game.toLowerCase().includes(w))) {
-      return interaction.reply({ content: "⛔ Jeu interdit.", ephemeral: true });
-    }
-
     const channel = interaction.guild.channels.cache.get(channelId);
     if (!channel) return;
 
@@ -239,6 +223,7 @@ client.on("interactionCreate", async interaction => {
 
     let role = interaction.guild.roles.cache.find(r => r.name === game);
     if (!role) role = await interaction.guild.roles.create({ name: game });
+
     if (!interaction.member.roles.cache.has(role.id)) {
       await interaction.member.roles.add(role);
     }
@@ -254,7 +239,7 @@ client.on("interactionCreate", async interaction => {
     await interaction.update({ components: interaction.message.components });
   }
 
-  /* 👥 MENU SLOTS */
+  /* 👥 SLOTS */
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
     const channelId = interaction.customId.split("_")[1];
     const data = tempVocals.get(channelId);
@@ -270,7 +255,7 @@ client.on("interactionCreate", async interaction => {
     await interaction.reply({ content: `👥 Limite définie à ${limit}`, ephemeral: true });
   }
 
-  /* ➕ REJOINDRE */
+  /* ➕ JOIN */
   if (interaction.isButton() && interaction.customId.startsWith("join_")) {
     const channelId = interaction.customId.split("_")[1];
     const channel = interaction.guild.channels.cache.get(channelId);
@@ -289,12 +274,6 @@ client.on("interactionCreate", async interaction => {
     await interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
   }
 });
-
-/* ===== LOG ===== */
-function log(msg) {
-  const ch = client.channels.cache.get(LOG_CHANNEL_ID);
-  if (ch) ch.send(msg);
-}
 
 /* ===== LOGIN ===== */
 client.login(TOKEN);
