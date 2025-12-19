@@ -195,15 +195,21 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     }, 3 * 60 * 1000);
   }
 
-  /* ❌ SUPPRESSION */
-  if (
-    oldState.channelId &&
-    oldState.channelId !== newState.channelId &&
-    tempVocals.has(oldState.channelId)
-  ) {
-    const channel = oldState.channel;
-    if (channel.members.size === 0) {
-      const data = tempVocals.get(channel.id);
+/* ❌ SUPPRESSION ROBUSTE */
+if (
+  oldState.channelId &&
+  tempVocals.has(oldState.channelId)
+) {
+  const channel = oldState.channel;
+
+  // Petite attente pour laisser Discord mettre à jour les membres
+  setTimeout(async () => {
+    if (!channel || channel.members.size > 0) return;
+
+    const data = tempVocals.get(channel.id);
+    if (!data) return;
+
+    try {
       const lfg = await channel.guild.channels.cache
         .get(LFG_CHANNEL_ID)
         ?.messages.fetch(data.lfgMsgId)
@@ -212,9 +218,14 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       if (lfg) await lfg.delete().catch(() => {});
       await channel.delete().catch(() => {});
       tempVocals.delete(channel.id);
+
+      log(`❌ Vocal supprimé : ${channel.name}`);
+    } catch (err) {
+      console.error("Erreur suppression vocal:", err);
     }
-  }
-});
+  }, 1000);
+}
+
 
 /* ===== INTERACTIONS ===== */
 client.on("interactionCreate", async interaction => {
