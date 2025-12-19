@@ -40,7 +40,7 @@ const HUBS = Object.keys(process.env)
 const GAMES = [
   "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
   "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
-  "Call of Duty: Warzone","Battlefield 6","Counter-Strike 2","Roblox",
+  "Call of Duty: Warzone","Battlefield 6","Counter-Strike 2",
   "Monster Hunter Wilds","ARC Raiders","ARK Ascended","GTA Online",
   "Red Dead Redemption 2","CloudHeim","Valheim","Enshrouded",
   "Elden Ring","7 Days To Die","Among Us","Dofus","World Of Warcraft"
