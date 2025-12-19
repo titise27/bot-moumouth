@@ -226,6 +226,35 @@ if (
     }
   }, 1000);
 }
+/* 🧹 FILET DE SÉCURITÉ GLOBAL */
+client.on("voiceStateUpdate", () => {
+  setTimeout(async () => {
+    for (const [channelId, data] of tempVocals.entries()) {
+      const channel = client.channels.cache.get(channelId);
+      if (!channel) {
+        tempVocals.delete(channelId);
+        continue;
+      }
+
+      if (channel.members.size === 0) {
+        try {
+          const lfg = await channel.guild.channels.cache
+            .get(LFG_CHANNEL_ID)
+            ?.messages.fetch(data.lfgMsgId)
+            .catch(() => null);
+
+          if (lfg) await lfg.delete().catch(() => {});
+          await channel.delete().catch(() => {});
+          tempVocals.delete(channelId);
+
+          log(`🧹 Vocal nettoyé (sécurité) : ${channel.name}`);
+        } catch (err) {
+          console.error("Cleanup error:", err);
+        }
+      }
+    }
+  }, 1500);
+});
 
 }); // 🧠 ← CETTE LIGNE MANQUAIT
 
