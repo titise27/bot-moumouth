@@ -38,13 +38,32 @@ const HUBS = Object.keys(process.env)
 
 /* ===== JEUX ===== */
 const GAMES = [
-  "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
-  "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
-  "Call of Duty: Warzone","Battlefield 6","Counter-Strike 2",
-  "Monster Hunter Wilds","ARC Raiders","ARK Ascended","GTA Online",
-  "Red Dead Redemption 2","CloudHeim","Valheim","Enshrouded",
-  "Elden Ring","7 Days To Die","Among Us","Dofus","World Of Warcraft"
-];
+  "Hunt 1896",
+  "Minecraft",
+  "Valorant",
+  "Clair Obscur: Expedition 33",
+  "Apex Legends",
+  "League of Legends",
+  "Fortnite",
+  "Hunt Showdown 1896",
+  "Call of Duty: Warzone",
+  "Battlefield 6",
+  "Counter-Strike 2",
+  "Monster Hunter Wilds",
+  "ARC Raiders",
+  "ARK Ascended",
+  "GTA Online",
+  "Red Dead Redemption 2",
+  "CloudHeim",
+  "Valheim",
+  "Enshrouded",
+  "Elden Ring",
+  "7 Days To Die",
+  "Among Us",
+  "Dofus",
+  "World Of Warcraft"
+]; // ⚠️ EXACTEMENT 24 JEUX
+
 
 /* ===== RÈGLES ===== */
 const DEFAULT_LIMIT = 4;
@@ -109,13 +128,16 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       )
       .setColor(0x00ff99);
 
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`game_${channel.id}`)
-      .setPlaceholder("Choisir un jeu")
-      .addOptions(
-        ...GAMES.map(g => ({ label: g, value: g })),
-        { label: "Autre (écrire le jeu)", value: "OTHER" }
-      );
+    const options = [
+  ...GAMES.slice(0, 24).map(g => ({ label: g, value: g })),
+  { label: "Autre (écrire le jeu)", value: "OTHER" }
+];
+
+const select = new StringSelectMenuBuilder()
+  .setCustomId(`game_${channel.id}`)
+  .setPlaceholder("Choisir un jeu")
+  .addOptions(options);
+
 
     const joinBtn = new ButtonBuilder()
       .setCustomId(`join_${channel.id}`)
