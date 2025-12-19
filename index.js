@@ -135,6 +135,32 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         new ActionRowBuilder().addComponents(joinBtn)
       ]
     });
+// 📩 DM AU CRÉATEUR — GUIDAGE UX
+try {
+  const dmEmbed = new EmbedBuilder()
+    .setTitle("🎮 Ton salon vocal est prêt !")
+    .setDescription(
+      `Tout est en place 👌\n\n` +
+      `🎯 **Étape 1** : choisis le **jeu** dans l’annonce\n` +
+      `👥 **Étape 2** : règle le **nombre de joueurs**\n` +
+      `🔔 **Étape 3** : les joueurs sont notifiés automatiquement\n\n` +
+      `💡 L’annonce est visible dans **#recherche-joueurs**`
+    )
+    .setColor(0x00ff99)
+    .setFooter({ text: "Bot Moumouth • Bon jeu !" });
+
+  const openBtn = new ButtonBuilder()
+    .setLabel("🔗 Ouvrir mon annonce")
+    .setStyle(ButtonStyle.Link)
+    .setURL(lfgMsg.url);
+
+  await member.send({
+    embeds: [dmEmbed],
+    components: [new ActionRowBuilder().addComponents(openBtn)]
+  });
+} catch (err) {
+  // MP fermés → on ignore sans erreur
+}
 
     tempVocals.set(channel.id, {
       owner: member.id,
