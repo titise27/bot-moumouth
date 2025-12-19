@@ -62,6 +62,14 @@ client.once("ready", () => {
 /* ===== VOICE STATE ===== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
 
+  console.log(
+    "[VOICE]",
+    "user =", newState.member?.user?.tag,
+    "old =", oldState.channelId,
+    "new =", newState.channelId
+  );
+
+
   /* ➕ CRÉATION */
   if (!oldState.channelId && newState.channelId === HUB_VOICE_ID) {
     const member = newState.member;
