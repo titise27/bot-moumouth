@@ -299,6 +299,21 @@ client.on("interactionCreate", async interaction => {
     await interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
   }
 });
+/* ===== LOGS ===== */
+async function log(msg) {
+  console.log("[LOG]", msg);
+
+  if (!LOG_CHANNEL_ID) return;
+
+  try {
+    const ch = await client.channels.fetch(LOG_CHANNEL_ID);
+    if (ch && ch.isTextBased()) {
+      await ch.send(msg);
+    }
+  } catch (err) {
+    console.error("Erreur envoi log:", err.message);
+  }
+}
 
 /* ===== LOGIN ===== */
 console.log("TOKEN PRESENT =", !!TOKEN);
