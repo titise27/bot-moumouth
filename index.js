@@ -167,6 +167,7 @@ client.on("interactionCreate", async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith("config_")) {
     const channelId = interaction.customId.split("_")[1];
     const data = tempVocals.get(channelId);
+
     if (!data || interaction.user.id !== data.owner) {
       return interaction.reply({ content: "❌ Ce n’est pas ton salon", ephemeral: true });
     }
@@ -195,158 +196,95 @@ client.on("interactionCreate", async interaction => {
     return interaction.showModal(modal);
   }
 
-/* 📝 MODAL CONFIG */
-if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
-  const channelId = interaction.customId.split("_")[1];
-  const data = tempVocals.get(channelId);
+  /* 📝 MODAL CONFIG */
+  if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
+    await interaction.deferReply({ ephemeral: true });
 
-  if (!data || interaction.user.id !== data.owner) {
-    return interaction.reply({ content: "❌ Non autorisé", ephemeral: true });
-  }
+    try {
+      const channelId = interaction.customId.split("_")[1];
+      const data = tempVocals.get(channelId);
 
-  // ✅ IMPORTANT : réponse immédiate
-  await interaction.deferReply({ ephemeral: true });
+      if (!data || interaction.user.id !== data.owner) {
+        return interaction.editReply("❌ Non autorisé.");
+      }
 
-  try {
-    const game = interaction.fields.getTextInputValue("game").trim();
-    const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
+      const game = interaction.fields.getTextInputValue("game").trim();
+      const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
 
-    if (!game || isNaN(limit) || limit < 1 || limit > 99) {
-      return interaction.editReply("❌ Valeurs invalides.");
+      if (!game || isNaN(limit) || limit < 1 || limit > 99) {
+        return interaction.editReply("❌ Valeurs invalides.");
+      }
+
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel) {
+        return interaction.editReply("❌ Salon introuvable.");
+      }
+
+      await channel.setName(`🎮 ${game}`);
+      await channel.setUserLimit(limit);
+
+      data.game = game;
+      data.limit = limit;
+
+      let role = interaction.guild.roles.cache.find(r => r.name === game);
+      if (!role) role = await interaction.guild.roles.create({ name: game });
+
+      if (!interaction.member.roles.cache.has(role.id)) {
+        await interaction.member.roles.add(role);
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("🎮 Recherche de mates")
+        .addFields(
+          { name: "Salon", value: channel.name, inline: true },
+          { name: "Jeu", value: game, inline: true },
+          { name: "Places", value: `1 / ${limit}`, inline: true }
+        )
+        .setColor(0x00ff99);
+
+      const joinBtn = new ButtonBuilder()
+        .setCustomId(`join_${channel.id}`)
+        .setLabel("➕ Rejoindre")
+        .setStyle(ButtonStyle.Success);
+
+      const lfgChannel = interaction.guild.channels.cache.get(LFG_CHANNEL_ID);
+      if (lfgChannel) {
+        const lfgMsg = await lfgChannel.send({
+          content: `🔔 ${role}`,
+          embeds: [embed],
+          components: [new ActionRowBuilder().addComponents(joinBtn)],
+          allowedMentions: { roles: [role.id] }
+        });
+
+        data.lfgMsgId = lfgMsg.id;
+      }
+
+      return interaction.editReply("✅ Salon configuré avec succès !");
+    } catch (err) {
+      console.error("MODAL ERROR:", err);
+      return interaction.editReply("❌ Erreur lors de la configuration.");
     }
-
-    const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) {
-      return interaction.editReply("❌ Salon introuvable.");
-    }
-
-    data.game = game;
-    data.limit = limit;
-
-    await channel.setName(`🎮 ${game}`);
-    await channel.setUserLimit(limit);
-
-    let role = interaction.guild.roles.cache.find(r => r.name === game);
-    if (!role) role = await interaction.guild.roles.create({ name: game });
-
-    if (!interaction.member.roles.cache.has(role.id)) {
-      await interaction.member.roles.add(role);
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle("🎮 Recherche de mates")
-      .addFields(
-        { name: "Salon", value: channel.name, inline: true },
-        { name: "Jeu", value: game, inline: true },
-        { name: "Places", value: `1 / ${limit}`, inline: true }
-      )
-      .setColor(0x00ff99);
-
-    const joinBtn = new ButtonBuilder()
-      .setCustomId(`join_${channel.id}`)
-      .setLabel("➕ Rejoindre")
-      .setStyle(ButtonStyle.Success);
-
-    const lfgChannel = interaction.guild.channels.cache.get(LFG_CHANNEL_ID);
-    if (lfgChannel) {
-      const lfgMsg = await lfgChannel.send({
-        content: `🔔 ${role}`,
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(joinBtn)],
-        allowedMentions: { roles: [role.id] }
-      });
-
-      data.lfgMsgId = lfgMsg.id;
-    }
-
-    return interaction.editReply("✅ Salon configuré avec succès !");
-  } catch (err) {
-    console.error("MODAL ERROR:", err);
-    return interaction.editReply("❌ Erreur lors de la configuration.");
   }
-}
-
-
-  /* 🎮 SALON */
-  data.game = game;
-  data.limit = limit;
-
-  await channel.setName(`🎮 ${game}`).catch(() => {});
-  await channel.setUserLimit(limit).catch(() => {});
-
-  /* 🎭 RÔLE */
-  let role = interaction.guild.roles.cache.find(r => r.name === game);
-  if (!role) {
-    role = await interaction.guild.roles.create({ name: game });
-  }
-
-  if (!interaction.member.roles.cache.has(role.id)) {
-    await interaction.member.roles.add(role).catch(() => {});
-  }
-
-  /* 📣 MESSAGE LFG */
-  const embed = new EmbedBuilder()
-    .setTitle("🎮 Recherche de mates")
-    .addFields(
-      { name: "Salon", value: channel.name, inline: true },
-      { name: "Jeu", value: game, inline: true },
-      { name: "Places", value: `1 / ${limit}`, inline: true }
-    )
-    .setColor(0x00ff99);
-
-  const joinBtn = new ButtonBuilder()
-    .setCustomId(`join_${channel.id}`)
-    .setLabel("➕ Rejoindre")
-    .setStyle(ButtonStyle.Success);
-
-  const lfgChannel = interaction.guild.channels.cache.get(LFG_CHANNEL_ID);
-  if (lfgChannel) {
-    const lfgMsg = await lfgChannel.send({
-      content: `🔔 ${role}`,
-      embeds: [embed],
-      components: [new ActionRowBuilder().addComponents(joinBtn)],
-      allowedMentions: { roles: [role.id] }
-    });
-
-    data.lfgMsgId = lfgMsg.id;
-  }
-
-  return interaction.editReply("✅ Salon configuré avec succès !");
-}
-
 
   /* ➕ JOIN */
   if (interaction.isButton() && interaction.customId.startsWith("join_")) {
     const channelId = interaction.customId.split("_")[1];
     const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) return;
+    if (!channel) {
+      return interaction.reply({ content: "❌ Salon expiré", ephemeral: true });
+    }
 
     await interaction.member.voice.setChannel(channel);
 
     const data = tempVocals.get(channelId);
     if (data?.game) {
       const role = interaction.guild.roles.cache.find(r => r.name === data.game);
-      if (role) await interaction.member.roles.add(role);
+      if (role && !interaction.member.roles.cache.has(role.id)) {
+        await interaction.member.roles.add(role);
+      }
     }
 
     return interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
   }
 });
 
-/* ===== LOG ===== */
-async function log(msg) {
-  console.log("[LOG]", msg);
-  if (!LOG_CHANNEL_ID) return;
-
-  try {
-    const ch = await client.channels.fetch(LOG_CHANNEL_ID);
-    if (ch?.isTextBased()) await ch.send(msg);
-  } catch {}
-}
-
-/* ===== LOGIN ===== */
-console.log("TOKEN PRESENT =", !!TOKEN);
-
-client.login(TOKEN)
-  .then(() => console.log("LOGIN OK"))
-  .catch(err => console.error("LOGIN ERROR", err));
