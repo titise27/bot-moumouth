@@ -14,13 +14,12 @@ const {
 
 const express = require("express");
 
-/* ===== KEEP ALIVE (OBLIGATOIRE POUR RENDER WEB SERVICE) ===== */
+/* ===== KEEP ALIVE (RENDER WEB SERVICE) ===== */
 const app = express();
 app.get("/", (_, res) => res.send("Bot en ligne"));
 app.listen(process.env.PORT || 10000, () => {
   console.log("🌐 Serveur web actif");
 });
-
 
 /* ===== CLIENT ===== */
 const client = new Client({
@@ -39,7 +38,7 @@ const LFG_CHANNEL_ID = process.env.LFG_CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const VIP_ROLE_ID = process.env.VIP_ROLE_ID;
 
-/* ===== JEUX (24) ===== */
+/* ===== JEUX ===== */
 const GAMES = [
   "Hunt 1896","Minecraft","Valorant","Clair Obscur: Expedition 33",
   "Apex Legends","League of Legends","Fortnite","Hunt Showdown 1896",
@@ -61,32 +60,21 @@ const cooldowns = new Map();
 /* ===== READY ===== */
 client.once("ready", () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
-  log("🟢 Bot démarré — logs OK");
+  log("🟢 Bot démarré");
 });
 
-
-/* ===== VOICE STATE ===== */
+/* ===================================================== */
+/* ================== VOICE STATE ====================== */
+/* ===================================================== */
 client.on("voiceStateUpdate", async (oldState, newState) => {
 
-  console.log(
-    "[VOICE]",
-    "user =", newState.member?.user?.tag,
-    "old =", oldState.channelId,
-    "new =", newState.channelId
-  );
+  /* ➕ CRÉATION (peu importe d’où vient l’utilisateur) */
+  if (newState.channelId === HUB_VOICE_ID && oldState.channelId !== HUB_VOICE_ID) {
+    const member = newState.member;
+    const guild = newState.guild;
 
-
-/* ➕ CRÉATION */
-if (
-  newState.channelId === HUB_VOICE_ID &&
-  oldState.channelId !== HUB_VOICE_ID
-) {
-  const member = newState.member;
-  const guild = newState.guild;
-
-
-    const isVIP = VIP_ROLE_ID && member.roles.cache.has(VIP_ROLE_ID);
     const last = cooldowns.get(member.id);
+    const isVIP = VIP_ROLE_ID && member.roles.cache.has(VIP_ROLE_ID);
 
     if (!isVIP && last && Date.now() - last < COOLDOWN_MS) {
       await member.voice.disconnect();
@@ -108,269 +96,159 @@ if (
     await member.voice.setChannel(channel);
     cooldowns.set(member.id, Date.now());
 
+    tempVocals.set(channel.id, {
+      owner: member.id,
+      lfgMsgId: null,
+      limit,
+      game: null,
+      pinged: false
+    });
+
+    /* 📩 DM CONFIG */
+    try {
+      const embed = new EmbedBuilder()
+        .setTitle("🎮 Configure ton salon")
+        .setDescription(
+          "Clique ci-dessous pour définir :\n\n" +
+          "🎮 le jeu\n" +
+          "👥 le nombre de joueurs"
+        )
+        .setColor(0x00ff99);
+
+      const btn = new ButtonBuilder()
+        .setCustomId(`config_${channel.id}`)
+        .setLabel("⚙️ Configurer")
+        .setStyle(ButtonStyle.Primary);
+
+      await member.send({
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(btn)]
+      });
+    } catch {}
+
+    log(`🎧 Vocal créé : ${channel.name}`);
+  }
+
+  /* ❌ SUPPRESSION PROPRE */
+  if (oldState.channelId && tempVocals.has(oldState.channelId)) {
+    const channel = oldState.channel;
+
+    setTimeout(async () => {
+      if (!channel || channel.members.size > 0) return;
+
+      const data = tempVocals.get(channel.id);
+      if (!data) return;
+
+      try {
+        if (data.lfgMsgId) {
+          const lfg = await channel.guild.channels.cache
+            .get(LFG_CHANNEL_ID)
+            ?.messages.fetch(data.lfgMsgId)
+            .catch(() => null);
+          if (lfg) await lfg.delete();
+        }
+
+        await channel.delete();
+        tempVocals.delete(channel.id);
+        log(`❌ Vocal supprimé : ${channel.name}`);
+      } catch (err) {
+        console.error("Erreur suppression:", err);
+      }
+    }, 1000);
+  }
+});
+
+/* ===================================================== */
+/* ================= INTERACTIONS ====================== */
+/* ===================================================== */
+client.on("interactionCreate", async interaction => {
+
+  /* ⚙️ BOUTON CONFIG */
+  if (interaction.isButton() && interaction.customId.startsWith("config_")) {
+    const channelId = interaction.customId.split("_")[1];
+    const data = tempVocals.get(channelId);
+    if (!data || interaction.user.id !== data.owner) {
+      return interaction.reply({ content: "❌ Ce n’est pas ton salon", ephemeral: true });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`setup_${channelId}`)
+      .setTitle("Configuration du salon");
+
+    const gameInput = new TextInputBuilder()
+      .setCustomId("game")
+      .setLabel("Nom du jeu")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const slotsInput = new TextInputBuilder()
+      .setCustomId("slots")
+      .setLabel("Nombre de joueurs")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(gameInput),
+      new ActionRowBuilder().addComponents(slotsInput)
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  /* 📝 MODAL CONFIG */
+  if (interaction.isModalSubmit() && interaction.customId.startsWith("setup_")) {
+    const channelId = interaction.customId.split("_")[1];
+    const data = tempVocals.get(channelId);
+    if (!data || interaction.user.id !== data.owner) return;
+
+    const game = interaction.fields.getTextInputValue("game").trim();
+    const limit = parseInt(interaction.fields.getTextInputValue("slots"), 10);
+
+    if (!game || isNaN(limit)) {
+      return interaction.reply({ content: "❌ Valeurs invalides", ephemeral: true });
+    }
+
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) return;
+
+    await channel.setName(`🎮 ${game}`);
+    await channel.setUserLimit(limit);
+
+    data.game = game;
+    data.limit = limit;
+
+    let role = interaction.guild.roles.cache.find(r => r.name === game);
+    if (!role) role = await interaction.guild.roles.create({ name: game });
+
+    await interaction.member.roles.add(role);
+
+    /* 📣 EMBED LFG */
     const embed = new EmbedBuilder()
       .setTitle("🎮 Recherche de mates")
       .addFields(
         { name: "Salon", value: channel.name, inline: true },
-        { name: "Jeu", value: "Non défini", inline: true },
+        { name: "Jeu", value: game, inline: true },
         { name: "Places", value: `1 / ${limit}`, inline: true }
       )
       .setColor(0x00ff99);
-
-    const gameSelect = new StringSelectMenuBuilder()
-      .setCustomId(`game_${channel.id}`)
-      .setPlaceholder("Choisir un jeu")
-      .addOptions(
-        ...GAMES.map(g => ({ label: g, value: g })),
-        { label: "Autre (écrire le jeu)", value: "OTHER" }
-      );
-
-    const slotSelect = new StringSelectMenuBuilder()
-      .setCustomId(`slots_${channel.id}`)
-      .setPlaceholder("👥 Nombre de joueurs")
-      .addOptions(
-        { label: "2 joueurs", value: "2" },
-        { label: "3 joueurs", value: "3" },
-        { label: "4 joueurs", value: "4" },
-        { label: "5 joueurs", value: "5" },
-        { label: "6 joueurs", value: "6" },
-        { label: "8 joueurs", value: "8" },
-        { label: "10 joueurs", value: "10" }
-      );
 
     const joinBtn = new ButtonBuilder()
       .setCustomId(`join_${channel.id}`)
       .setLabel("➕ Rejoindre")
       .setStyle(ButtonStyle.Success);
 
-    const lfgMsg = await guild.channels.cache.get(LFG_CHANNEL_ID).send({
-      embeds: [embed],
-      components: [
-        new ActionRowBuilder().addComponents(gameSelect),
-        new ActionRowBuilder().addComponents(slotSelect),
-        new ActionRowBuilder().addComponents(joinBtn)
-      ]
-    });
-
-    /* 📩 DM AU CRÉATEUR */
-    try {
-      const dmEmbed = new EmbedBuilder()
-        .setTitle("🎮 Ton vocal est prêt !")
-        .setDescription(
-          "🎯 Choisis le **jeu**\n" +
-          "👥 Règle le **nombre de joueurs**\n" +
-          "🔔 Les joueurs seront notifiés\n\n" +
-          "📍 Annonce postée dans **#recherche-joueurs**"
-        )
-        .setColor(0x00ff99);
-
-      const openBtn = new ButtonBuilder()
-        .setLabel("🔗 Ouvrir mon annonce")
-        .setStyle(ButtonStyle.Link)
-        .setURL(lfgMsg.url);
-
-      await member.send({
-        embeds: [dmEmbed],
-        components: [new ActionRowBuilder().addComponents(openBtn)]
-      });
-    } catch {}
-
-    tempVocals.set(channel.id, {
-      owner: member.id,
-      lfgMsgId: lfgMsg.id,
-      limit,
-      game: null,
-      pinged: false,
-      reminded: false
-    });
-
-    /* ⏰ RAPPEL AUTO */
-    setTimeout(async () => {
-      const data = tempVocals.get(channel.id);
-      if (!data || data.reminded || !data.game) return;
-
-      const ch = guild.channels.cache.get(channel.id);
-      if (!ch || ch.members.size > 1) return;
-
-      const role = guild.roles.cache.find(r => r.name === data.game);
-      const lfg = guild.channels.cache.get(LFG_CHANNEL_ID);
-
-      if (role && lfg) {
-        await lfg.send({
-          content: `⏰ ${role} **Il reste de la place pour jouer !**`,
-          allowedMentions: { roles: [role.id] }
-        });
-        data.reminded = true;
-      }
-    }, 3 * 60 * 1000);
-  }
-
-/* ❌ SUPPRESSION ROBUSTE */
-if (
-  oldState.channelId &&
-  tempVocals.has(oldState.channelId)
-) {
-  const channel = oldState.channel;
-
-  setTimeout(async () => {
-    if (!channel || channel.members.size > 0) return;
-
-    const data = tempVocals.get(channel.id);
-    if (!data) return;
-
-    try {
-      const lfg = await channel.guild.channels.cache
-        .get(LFG_CHANNEL_ID)
-        ?.messages.fetch(data.lfgMsgId)
-        .catch(() => null);
-
-      if (lfg) await lfg.delete().catch(() => {});
-      await channel.delete().catch(() => {});
-      tempVocals.delete(channel.id);
-
-      log(`❌ Vocal supprimé : ${channel.name}`);
-    } catch (err) {
-      console.error("Erreur suppression vocal:", err);
-    }
-  }, 1000);
-}
-/* 🧹 FILET DE SÉCURITÉ GLOBAL */
-client.on("voiceStateUpdate", () => {
-  setTimeout(async () => {
-    for (const [channelId, data] of tempVocals.entries()) {
-      const channel = client.channels.cache.get(channelId);
-      if (!channel) {
-        tempVocals.delete(channelId);
-        continue;
-      }
-
-      if (channel.members.size === 0) {
-        try {
-          const lfg = await channel.guild.channels.cache
-            .get(LFG_CHANNEL_ID)
-            ?.messages.fetch(data.lfgMsgId)
-            .catch(() => null);
-
-          if (lfg) await lfg.delete().catch(() => {});
-          await channel.delete().catch(() => {});
-          tempVocals.delete(channelId);
-
-          log(`🧹 Vocal nettoyé (sécurité) : ${channel.name}`);
-        } catch (err) {
-          console.error("Cleanup error:", err);
-        }
-      }
-    }
-  }, 1500);
-});
-
-}); // 🧠 ← CETTE LIGNE MANQUAIT
-
-/* ===== INTERACTIONS ===== */
-client.on("interactionCreate", async interaction => {
-
-
-  /* 🎮 JEU */
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("game_")) {
-    const channelId = interaction.customId.split("_")[1];
-    const data = tempVocals.get(channelId);
-    if (!data || interaction.user.id !== data.owner) return;
-
-    const selected = interaction.values[0];
-const channel = interaction.guild.channels.cache.get(channelId);
-if (!channel) return;
-
-/* ✍️ AUTRE → POPUP TEXTE */
-if (selected === "OTHER") {
-  const modal = new ModalBuilder()
-    .setCustomId(`other_${channelId}`)
-    .setTitle("Nom du jeu");
-
-  const input = new TextInputBuilder()
-    .setCustomId("game_name")
-    .setLabel("Quel est le jeu ?")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(input)
-  );
-
-  return interaction.showModal(modal);
-}
-
-/* 🎮 JEU NORMAL */
-data.game = selected;
-await channel.setName(`🎮 ${selected}`);
-
-
-    let role = interaction.guild.roles.cache.find(r => r.name === game);
-    if (!role) role = await interaction.guild.roles.create({ name: game });
-
-    if (!interaction.member.roles.cache.has(role.id)) {
-      await interaction.member.roles.add(role);
-    }
-
-    if (!data.pinged) {
-      await interaction.guild.channels.cache.get(LFG_CHANNEL_ID).send({
-        content: `🔔 ${role} **Une recherche de mates est lancée !**`,
+    const lfgMsg = await interaction.guild.channels.cache
+      .get(LFG_CHANNEL_ID)
+      .send({
+        content: `🔔 ${role}`,
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(joinBtn)],
         allowedMentions: { roles: [role.id] }
       });
-      data.pinged = true;
-    }
 
-    await interaction.update({ components: interaction.message.components });
-  }
-/* ✍️ MODAL AUTRE JEU */
-if (interaction.isModalSubmit() && interaction.customId.startsWith("other_")) {
-  const channelId = interaction.customId.split("_")[1];
-  const data = tempVocals.get(channelId);
-  if (!data || interaction.user.id !== data.owner) return;
+    data.lfgMsgId = lfgMsg.id;
 
-  const game = interaction.fields.getTextInputValue("game_name").trim();
-  if (!game) return;
-
-  const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) return;
-
-  data.game = game;
-  await channel.setName(`🎮 ${game}`);
-
-  let role = interaction.guild.roles.cache.find(r => r.name === game);
-  if (!role) role = await interaction.guild.roles.create({ name: game });
-
-  if (!interaction.member.roles.cache.has(role.id)) {
-    await interaction.member.roles.add(role);
-  }
-
-  if (!data.pinged) {
-    await interaction.guild.channels.cache.get(LFG_CHANNEL_ID).send({
-      content: `🔔 ${role} **Une recherche de mates est lancée !**`,
-      allowedMentions: { roles: [role.id] }
-    });
-    data.pinged = true;
-  }
-
-  await interaction.reply({
-    content: `✅ Jeu défini : **${game}**`,
-    ephemeral: true
-  });
-}
-
-  /* 👥 SLOTS */
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("slots_")) {
-    const channelId = interaction.customId.split("_")[1];
-    const data = tempVocals.get(channelId);
-    if (!data || interaction.user.id !== data.owner) return;
-
-    const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) return;
-
-    const limit = parseInt(interaction.values[0], 10);
-    await channel.setUserLimit(limit);
-    data.limit = limit;
-
-    await interaction.reply({ content: `👥 Limite définie à ${limit}`, ephemeral: true });
+    return interaction.reply({ content: "✅ Salon configuré", ephemeral: true });
   }
 
   /* ➕ JOIN */
@@ -383,29 +261,23 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith("other_")) {
 
     const data = tempVocals.get(channelId);
     if (data?.game) {
-      let role = interaction.guild.roles.cache.find(r => r.name === data.game);
-      if (role && !interaction.member.roles.cache.has(role.id)) {
-        await interaction.member.roles.add(role);
-      }
+      const role = interaction.guild.roles.cache.find(r => r.name === data.game);
+      if (role) await interaction.member.roles.add(role);
     }
 
-    await interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
+    return interaction.reply({ content: "✅ Vocal rejoint", ephemeral: true });
   }
 });
-/* ===== LOGS ===== */
+
+/* ===== LOG ===== */
 async function log(msg) {
   console.log("[LOG]", msg);
-
   if (!LOG_CHANNEL_ID) return;
 
   try {
     const ch = await client.channels.fetch(LOG_CHANNEL_ID);
-    if (ch && ch.isTextBased()) {
-      await ch.send(msg);
-    }
-  } catch (err) {
-    console.error("Erreur envoi log:", err.message);
-  }
+    if (ch?.isTextBased()) await ch.send(msg);
+  } catch {}
 }
 
 /* ===== LOGIN ===== */
@@ -414,5 +286,3 @@ console.log("TOKEN PRESENT =", !!TOKEN);
 client.login(TOKEN)
   .then(() => console.log("LOGIN OK"))
   .catch(err => console.error("LOGIN ERROR", err));
-
-
