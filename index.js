@@ -223,30 +223,33 @@ client.on("interactionCreate", async interaction => {
     await interaction.member.roles.add(role);
 
     /* 📣 EMBED LFG */
-    const embed = new EmbedBuilder()
-      .setTitle("🎮 Recherche de mates")
-      .addFields(
-        { name: "Salon", value: channel.name, inline: true },
-        { name: "Jeu", value: game, inline: true },
-        { name: "Places", value: `1 / ${limit}`, inline: true }
-      )
-      .setColor(0x00ff99);
+    const guild = client.guilds.cache.get(channel.guild.id);
 
-    const joinBtn = new ButtonBuilder()
-      .setCustomId(`join_${channel.id}`)
-      .setLabel("➕ Rejoindre")
-      .setStyle(ButtonStyle.Success);
+const embed = new EmbedBuilder()
+  .setTitle("🎮 Recherche de mates")
+  .addFields(
+    { name: "Salon", value: channel.name, inline: true },
+    { name: "Jeu", value: game, inline: true },
+    { name: "Places", value: `1 / ${limit}`, inline: true }
+  )
+  .setColor(0x00ff99);
 
-    const lfgMsg = await interaction.guild.channels.cache
-      .get(LFG_CHANNEL_ID)
-      .send({
-        content: `🔔 ${role}`,
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(joinBtn)],
-        allowedMentions: { roles: [role.id] }
-      });
+const joinBtn = new ButtonBuilder()
+  .setCustomId(`join_${channel.id}`)
+  .setLabel("➕ Rejoindre")
+  .setStyle(ButtonStyle.Success);
 
-    data.lfgMsgId = lfgMsg.id;
+const lfgMsg = await guild.channels.cache
+  .get(LFG_CHANNEL_ID)
+  .send({
+    content: `🔔 ${role}`,
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(joinBtn)],
+    allowedMentions: { roles: [role.id] }
+  });
+
+data.lfgMsgId = lfgMsg.id;
+
 
     return interaction.reply({ content: "✅ Salon configuré", ephemeral: true });
   }
